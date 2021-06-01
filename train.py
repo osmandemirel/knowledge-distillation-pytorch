@@ -415,7 +415,7 @@ if __name__ == '__main__':
     else:
         if params.model_version == "cnn":
             model = net.Net(params).cuda() if params.cuda else net.Net(params)
-            optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
+            optimizer = optim.Adam(model.parameters(), lr=params.learning_rate, weight_decay=5e-4)
             # fetch loss function and metrics
             loss_fn = net.loss_fn
             metrics = net.metrics
