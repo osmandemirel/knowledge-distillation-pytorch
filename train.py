@@ -14,6 +14,8 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 from torch.autograd import Variable
 from tqdm import tqdm
+from torch.utils.data.sampler import SubsetRandomSampler
+from sklearn.model_selection import KFold
 
 import utils
 import model.net as net
@@ -342,102 +344,110 @@ if __name__ == '__main__':
     if params.subset_percent < 1.0:
         train_dl = data_loader.fetch_subset_dataloader('train', params)
     else:
-        train_dl = data_loader.fetch_dataloader('train', params)
-    
-    dev_dl = data_loader.fetch_dataloader('dev', params)
-
-    logging.info("- done.")
-
-    """Based on the model_version, determine model/optimizer and KD training mode
-       WideResNet and DenseNet were trained on multi-GPU; need to specify a dummy
-       nn.DataParallel module to correctly load the model parameters
-    """
-    if "distill" in params.model_version:
-
-        # train a 5-layer CNN or a 18-layer ResNet with knowledge distillation
-        if params.model_version == "cnn_distill":
-            model = net.Net(params).cuda() if params.cuda else net.Net(params)
-            optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
-            # fetch loss function and metrics definition in model files
-            loss_fn_kd = net.loss_fn_kd
-            metrics = net.metrics
+        #train_dl = data_loader.fetch_dataloader('train', params)
+        train_set = data_loader.fetch_dataloader('train', params)
         
-        elif params.model_version == 'resnet18_distill':
-            model = resnet.ResNet18().cuda() if params.cuda else resnet.ResNet18()
-            optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
-                                  momentum=0.9, weight_decay=5e-4)
-            # fetch loss function and metrics definition in model files
-            loss_fn_kd = net.loss_fn_kd
-            metrics = resnet.metrics
+    for train_ixs, val_ixs in kf.split(range(train_set.data.shape[0])):
+        train_sampler = SubsetRandomSampler(train_ixs)
+        val_sampler = SubsetRandomSampler(val_ixs)
+        train_dl = torch.utils.data.DataLoader(train_set, sampler=train_sampler, batch_size=params.batch_size,
+            num_workers=params.num_workers, pin_memory=params.cuda)
+        dev_dl = torch.utils.data.DataLoader(train_set, sampler=val_sampler, batch_size=params.batch_size,
+            num_workers=params.num_workers, pin_memory=params.cuda)
+    #dev_dl = data_loader.fetch_dataloader('dev', params)
 
-        """ 
-            Specify the pre-trained teacher models for knowledge distillation
-            Important note: wrn/densenet/resnext/preresnet were pre-trained models using multi-GPU,
-            therefore need to call "nn.DaraParallel" to correctly load the model weights
-            Trying to run on CPU will then trigger errors (too time-consuming anyway)!
+        logging.info("- done.")
+
+        """Based on the model_version, determine model/optimizer and KD training mode
+           WideResNet and DenseNet were trained on multi-GPU; need to specify a dummy
+           nn.DataParallel module to correctly load the model parameters
         """
-        if params.teacher == "resnet18":
-            teacher_model = resnet.ResNet18()
-            teacher_checkpoint = 'experiments/base_resnet18/best.pth.tar'
-            teacher_model = teacher_model.cuda() if params.cuda else teacher_model
+        if "distill" in params.model_version:
 
-        elif params.teacher == "wrn":
-            teacher_model = wrn.WideResNet(depth=28, num_classes=10, widen_factor=10,
-                                           dropRate=0.3)
-            teacher_checkpoint = 'experiments/base_wrn/best.pth.tar'
-            teacher_model = nn.DataParallel(teacher_model).cuda()
+            # train a 5-layer CNN or a 18-layer ResNet with knowledge distillation
+            if params.model_version == "cnn_distill":
+                model = net.Net(params).cuda() if params.cuda else net.Net(params)
+                optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
+                # fetch loss function and metrics definition in model files
+                loss_fn_kd = net.loss_fn_kd
+                metrics = net.metrics
 
-        elif params.teacher == "densenet":
-            teacher_model = densenet.DenseNet(depth=100, growthRate=12)
-            teacher_checkpoint = 'experiments/base_densenet/best.pth.tar'
-            teacher_model = nn.DataParallel(teacher_model).cuda()
+            elif params.model_version == 'resnet18_distill':
+                model = resnet.ResNet18().cuda() if params.cuda else resnet.ResNet18()
+                optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
+                                      momentum=0.9, weight_decay=5e-4)
+                # fetch loss function and metrics definition in model files
+                loss_fn_kd = net.loss_fn_kd
+                metrics = resnet.metrics
 
-        elif params.teacher == "resnext29":
-            teacher_model = resnext.CifarResNeXt(cardinality=8, depth=29, num_classes=10)
-            teacher_checkpoint = 'experiments/base_resnext29/best.pth.tar'
-            teacher_model = nn.DataParallel(teacher_model).cuda()
+            """ 
+                Specify the pre-trained teacher models for knowledge distillation
+                Important note: wrn/densenet/resnext/preresnet were pre-trained models using multi-GPU,
+                therefore need to call "nn.DaraParallel" to correctly load the model weights
+                Trying to run on CPU will then trigger errors (too time-consuming anyway)!
+            """
+            if params.teacher == "resnet18":
+                teacher_model = resnet.ResNet18()
+                teacher_checkpoint = 'experiments/base_resnet18/best.pth.tar'
+                teacher_model = teacher_model.cuda() if params.cuda else teacher_model
 
-        elif params.teacher == "preresnet110":
-            teacher_model = preresnet.PreResNet(depth=110, num_classes=10)
-            teacher_checkpoint = 'experiments/base_preresnet110/best.pth.tar'
-            teacher_model = nn.DataParallel(teacher_model).cuda()
+            elif params.teacher == "wrn":
+                teacher_model = wrn.WideResNet(depth=28, num_classes=10, widen_factor=10,
+                                               dropRate=0.3)
+                teacher_checkpoint = 'experiments/base_wrn/best.pth.tar'
+                teacher_model = nn.DataParallel(teacher_model).cuda()
 
-        utils.load_checkpoint(teacher_checkpoint, teacher_model)
+            elif params.teacher == "densenet":
+                teacher_model = densenet.DenseNet(depth=100, growthRate=12)
+                teacher_checkpoint = 'experiments/base_densenet/best.pth.tar'
+                teacher_model = nn.DataParallel(teacher_model).cuda()
 
-        # Train the model with KD
-        logging.info("Experiment - model version: {}".format(params.model_version))
-        logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
-        logging.info("First, loading the teacher model and computing its outputs...")
-        train_and_evaluate_kd(model, teacher_model, train_dl, dev_dl, optimizer, loss_fn_kd,
-                              metrics, params, args.model_dir, args.restore_file)
+            elif params.teacher == "resnext29":
+                teacher_model = resnext.CifarResNeXt(cardinality=8, depth=29, num_classes=10)
+                teacher_checkpoint = 'experiments/base_resnext29/best.pth.tar'
+                teacher_model = nn.DataParallel(teacher_model).cuda()
 
-    # non-KD mode: regular training of the baseline CNN or ResNet-18
-    else:
-        if params.model_version == "cnn":
-            model = net.Net(params).cuda() if params.cuda else net.Net(params)
-            optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
-            # fetch loss function and metrics
-            loss_fn = net.loss_fn
-            metrics = net.metrics
+            elif params.teacher == "preresnet110":
+                teacher_model = preresnet.PreResNet(depth=110, num_classes=10)
+                teacher_checkpoint = 'experiments/base_preresnet110/best.pth.tar'
+                teacher_model = nn.DataParallel(teacher_model).cuda()
 
-        elif params.model_version == "resnet18":
-            model = resnet.ResNet18().cuda() if params.cuda else resnet.ResNet18()
-            optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
-                                  momentum=0.9, weight_decay=5e-4)
-            # fetch loss function and metrics
-            loss_fn = resnet.loss_fn
-            metrics = resnet.metrics
+            utils.load_checkpoint(teacher_checkpoint, teacher_model)
 
-        # elif params.model_version == "wrn":
-        #     model = wrn.wrn(depth=28, num_classes=10, widen_factor=10, dropRate=0.3)
-        #     model = model.cuda() if params.cuda else model
-        #     optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
-        #                           momentum=0.9, weight_decay=5e-4)
-        #     # fetch loss function and metrics
-        #     loss_fn = wrn.loss_fn
-        #     metrics = wrn.metrics
+            # Train the model with KD
+            logging.info("Experiment - model version: {}".format(params.model_version))
+            logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
+            logging.info("First, loading the teacher model and computing its outputs...")
+            train_and_evaluate_kd(model, teacher_model, train_dl, dev_dl, optimizer, loss_fn_kd,
+                                  metrics, params, args.model_dir, args.restore_file)
 
-        # Train the model
-        logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
-        train_and_evaluate(model, train_dl, dev_dl, optimizer, loss_fn, metrics, params,
-                           args.model_dir, args.restore_file)
+        # non-KD mode: regular training of the baseline CNN or ResNet-18
+        else:
+            if params.model_version == "cnn":
+                model = net.Net(params).cuda() if params.cuda else net.Net(params)
+                optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
+                # fetch loss function and metrics
+                loss_fn = net.loss_fn
+                metrics = net.metrics
+
+            elif params.model_version == "resnet18":
+                model = resnet.ResNet18().cuda() if params.cuda else resnet.ResNet18()
+                optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
+                                      momentum=0.9, weight_decay=5e-4)
+                # fetch loss function and metrics
+                loss_fn = resnet.loss_fn
+                metrics = resnet.metrics
+
+            # elif params.model_version == "wrn":
+            #     model = wrn.wrn(depth=28, num_classes=10, widen_factor=10, dropRate=0.3)
+            #     model = model.cuda() if params.cuda else model
+            #     optimizer = optim.SGD(model.parameters(), lr=params.learning_rate,
+            #                           momentum=0.9, weight_decay=5e-4)
+            #     # fetch loss function and metrics
+            #     loss_fn = wrn.loss_fn
+            #     metrics = wrn.metrics
+
+            # Train the model
+            logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
+            train_and_evaluate(model, train_dl, dev_dl, optimizer, loss_fn, metrics, params,
+                               args.model_dir, args.restore_file)
