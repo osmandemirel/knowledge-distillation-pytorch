@@ -101,7 +101,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
 
 
 def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
-                       loss_fn, metrics, params, model_dir, restore_file=None):
+                       loss_fn, metrics, params, model_dir, restore_file=None, fold_ix=fold_ix)):
     """Train the model and evaluate every epoch.
 
     Args:
@@ -111,6 +111,7 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
         restore_file: (string) - name of file to restore from (without its extension .pth.tar)
     """
     # reload weights from restore_file if specified
+    print(f"Training Fold {fold_ix + 1} model..")
     if restore_file is not None:
         restore_path = os.path.join(args.model_dir, args.restore_file + '.pth.tar')
         logging.info("Restoring parameters from {}".format(restore_path))
