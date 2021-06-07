@@ -346,6 +346,8 @@ if __name__ == '__main__':
     else:
         #train_dl = data_loader.fetch_dataloader('train', params)
         train_set = data_loader.fetch_dataloader('train', params)
+    #dev_dl = data_loader.fetch_dataloader('dev', params)
+    test_dl = data_loader.fetch_dataloader('dev', params)
     
     kf = KFold(n_splits=5, shuffle=True)
     for train_ixs, val_ixs in kf.split(range(train_set.data.shape[0])):
@@ -355,7 +357,6 @@ if __name__ == '__main__':
             num_workers=params.num_workers, pin_memory=params.cuda)
         dev_dl = torch.utils.data.DataLoader(train_set, sampler=val_sampler, batch_size=params.batch_size,
             num_workers=params.num_workers, pin_memory=params.cuda)
-    #dev_dl = data_loader.fetch_dataloader('dev', params)
 
         logging.info("- done.")
 
@@ -452,3 +453,5 @@ if __name__ == '__main__':
             logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
             train_and_evaluate(model, train_dl, dev_dl, optimizer, loss_fn, metrics, params,
                                args.model_dir, args.restore_file)
+        test_metrics = evaluate(model, loss_fn, test_dl, metrics, params)
+        print(test_metrics['accuracy'])
