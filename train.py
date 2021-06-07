@@ -101,7 +101,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
 
 
 def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
-                       loss_fn, metrics, params, model_dir, restore_file=None, fold_ix=fold_ix)):
+                       loss_fn, metrics, params, model_dir, restore_file=None, fold_ix=1):
     """Train the model and evaluate every epoch.
 
     Args:
