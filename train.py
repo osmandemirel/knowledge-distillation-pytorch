@@ -101,7 +101,7 @@ def train(model, optimizer, loss_fn, dataloader, metrics, params):
 
 
 def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
-                       loss_fn, metrics, params, model_dir, restore_file=None):
+                       loss_fn, metrics, params, model_dir, fold_ix=1, restore_file=None):
     """Train the model and evaluate every epoch.
 
     Args:
@@ -111,6 +111,7 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer,
         restore_file: (string) - name of file to restore from (without its extension .pth.tar)
     """
     # reload weights from restore_file if specified
+    print(f"Training Fold {fold_ix + 1} model..")
     if restore_file is not None:
         restore_path = os.path.join(args.model_dir, args.restore_file + '.pth.tar')
         logging.info("Restoring parameters from {}".format(restore_path))
@@ -350,7 +351,7 @@ if __name__ == '__main__':
     test_dl = data_loader.fetch_dataloader('dev', params)
     
     kf = KFold(n_splits=5, shuffle=True)
-    for train_ixs, val_ixs in kf.split(range(train_set.data.shape[0])):
+    for fold_ix, (train_ixs, val_ixs) in enumerate(kf.split(range(train_set.data.shape[0]))):
         train_sampler = SubsetRandomSampler(train_ixs)
         val_sampler = SubsetRandomSampler(val_ixs)
         train_dl = torch.utils.data.DataLoader(train_set, sampler=train_sampler, batch_size=params.batch_size,
@@ -421,7 +422,10 @@ if __name__ == '__main__':
             logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
             logging.info("First, loading the teacher model and computing its outputs...")
             train_and_evaluate_kd(model, teacher_model, train_dl, dev_dl, optimizer, loss_fn_kd,
-                                  metrics, params, args.model_dir, args.restore_file)
+                                  metrics, params, args.model_dir, args.restore_file, fold_ix=fold_ix)
+            print(f"Evaluate Fold {fold_ix + 1} model on unseen data..")
+            test_metrics = evaluate(model, loss_fn, test_dl, metrics, params)
+            print("Accuracy on unseen data:", test_metrics['accuracy'])
 
         # non-KD mode: regular training of the baseline CNN or ResNet-18
         else:
@@ -452,6 +456,7 @@ if __name__ == '__main__':
             # Train the model
             logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
             train_and_evaluate(model, train_dl, dev_dl, optimizer, loss_fn, metrics, params,
-                               args.model_dir, args.restore_file)
-        test_metrics = evaluate(model, loss_fn, test_dl, metrics, params)
-        print(test_metrics['accuracy'])
+                               args.model_dir, args.restore_file, fold_ix=fold_ix)
+            print(f"Evaluate Fold {fold_ix + 1} model on unseen data..")
+            test_metrics = evaluate(model, loss_fn, test_dl, metrics, params)
+            print("Accuracy on unseen data:", test_metrics['accuracy'])
