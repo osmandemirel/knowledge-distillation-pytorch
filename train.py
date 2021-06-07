@@ -425,7 +425,7 @@ if __name__ == '__main__':
             train_and_evaluate_kd(model, teacher_model, train_dl, dev_dl, optimizer, loss_fn_kd,
                                   metrics, params, args.model_dir, args.restore_file, fold_ix=fold_ix)
             print(f"Evaluate Fold {fold_ix + 1} model on unseen data..")
-            test_metrics = evaluate(model, loss_fn, test_dl, metrics, params)
+            test_metrics = evaluate(model, loss_fn_kd, test_dl, metrics, params)
             print("Accuracy on unseen data:", test_metrics['accuracy'])
 
         # non-KD mode: regular training of the baseline CNN or ResNet-18
