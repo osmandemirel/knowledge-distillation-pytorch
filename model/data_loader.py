@@ -93,14 +93,15 @@ def fetch_subset_dataloader(types, params):
 
     train_sampler = SubsetRandomSampler(indices[:split])
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=params.batch_size,
-        sampler=train_sampler, num_workers=params.num_workers, pin_memory=params.cuda)
+    #trainloader = torch.utils.data.DataLoader(trainset, batch_size=params.batch_size,
+    #    sampler=train_sampler, num_workers=params.num_workers, pin_memory=params.cuda)
 
     devloader = torch.utils.data.DataLoader(devset, batch_size=params.batch_size,
         shuffle=False, num_workers=params.num_workers, pin_memory=params.cuda)
 
     if types == 'train':
-        dl = trainloader
+        dl = trainset
+    #    dl = trainloader
     else:
         dl = devloader
 
